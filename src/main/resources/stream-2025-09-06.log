@@ -1,0 +1,67 @@
+2025-09-06 00:00:00.828 [T00032070] [INF] - REQ: GetPayment
+2025-09-06 00:00:00.828 [T00032070] [INF] -   |- Peer: IBA@10.2.200.10
+2025-09-06 00:00:00.828 [T00032070] [INF] -   |- Token: +7N5AaWthzBtV50XwVewnw==
+2025-09-06 00:00:00.873 [T00032070] [INF] -   |- Serial: A10E0C27713D4DF88FFEAC9E125233A1
+2025-09-06 00:00:00.875 [T00032070] [INF] - RES: GetPayment
+2025-09-06 00:00:00.875 [T00032070] [INF] -   |- Result: type.Payment@6e18eaa0
+2025-09-06 00:00:00.932 [T00037238] [INF] - REQ: GetPayment
+2025-09-06 00:00:00.932 [T00037238] [INF] -   |- Peer: IBA@10.2.200.10
+2025-09-06 00:00:00.932 [T00037238] [INF] -   |- Token: HOhARL7y1NKFTjbd9GDgmQ==
+2025-09-06 00:00:00.943 [T00037238] [INF] -   |- Serial: 372E7E7B8C6F4815B7D384BE2E24DDF9
+2025-09-06 00:00:00.946 [T00037238] [INF] - RES: GetPayment
+2025-09-06 00:00:00.946 [T00037238] [INF] -   |- Result: type.Payment@33be60d6
+2025-09-06 00:00:01.166 [T00023629] [INF] - REQ: Register
+2025-09-06 00:00:01.166 [T00023629] [INF] -   |- Peer: KBT@10.2.200.10
+2025-09-06 00:00:01.166 [T00023629] [INF] -   |- Token: ZNpkoAhOWKwbiTuW0Wj2sg==
+2025-09-06 00:00:01.177 [T00023629] [INF] -   |- ID: 9954
+2025-09-06 00:00:01.177 [T00023629] [INF] -   |- Amount: 7100
+2025-09-06 00:00:01.177 [T00023629] [INF] -   |- Fee: 0
+2025-09-06 00:00:01.177 [T00023629] [INF] -   |- Currency: 944
+2025-09-06 00:00:01.177 [T00023629] [INF] -   |- Originator: 1087057634
+2025-09-06 00:00:01.177 [T00023629] [INF] -   |- Detail list: [id: 6Y51WDG, type: customer_code, value: 1000767676, customer_code: 1000767676, cari_fin_kod: 6Y51WDG, debt_id: 03997568, faktura_meblegi: 1270.03, fakturta_ayliq_odenis: 70.56, faktura_odenen: 639.0, faktura_qalan: 631.03, faktura_cerime: 0.0, faktura_tarixi: 2024-10-26, agent: KBT]
+MQY
+2025-09-06 00:00:38.801 [T00054696] [ERR] - Sep 06, 2025 12:00:38 AM com.sun.xml.internal.ws.server.sei.TieHandler createResponse
+2025-09-06 00:00:38.801 [T00054696] [ERR] - SEVERE: source
+2025-09-06 00:00:38.801 [T00054696] [ERR] - java.lang.NullPointerException: source
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at java.util.Objects.requireNonNull(Objects.java:228)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at java.util.Scanner.<init>(Scanner.java:578)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at stream.api.adapter.adp0175.ADP0175.getBillList(ADP0175.java:124)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at e01.STREAM.getBillList(STREAM.java:535)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at sun.reflect.GeneratedMethodAccessor114.invoke(Unknown Source)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at java.lang.reflect.Method.invoke(Method.java:498)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at sun.reflect.misc.Trampoline.invoke(MethodUtil.java:71)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at sun.reflect.GeneratedMethodAccessor113.invoke(Unknown Source)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at java.lang.reflect.Method.invoke(Method.java:498)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at sun.reflect.misc.MethodUtil.invoke(MethodUtil.java:275)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at sun.reflect.GeneratedMethodAccessor112.invoke(Unknown Source)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at java.lang.reflect.Method.invoke(Method.java:498)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.api.server.MethodUtil.invoke(MethodUtil.java:68)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.api.server.InstanceResolver$1.invoke(InstanceResolver.java:235)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at e01.Filter.invoke(Filter.java:163)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.server.InvokerTube$2.invoke(InvokerTube.java:134)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.server.sei.SEIInvokerTube.processRequest(SEIInvokerTube.java:73)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.api.pipe.Fiber.__doRun(Fiber.java:1121)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.api.pipe.Fiber._doRun(Fiber.java:1035)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.api.pipe.Fiber.doRun(Fiber.java:1004)
+2025-09-06 00:00:38.801 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.api.pipe.Fiber.runSync(Fiber.java:862)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.server.WSEndpointImpl$2.process(WSEndpointImpl.java:404)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.transport.http.HttpAdapter$HttpToolkit.handle(HttpAdapter.java:706)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.transport.http.HttpAdapter.handle(HttpAdapter.java:260)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.transport.http.server.WSHttpHandler.handleExchange(WSHttpHandler.java:98)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at com.sun.xml.internal.ws.transport.http.server.WSHttpHandler.handle(WSHttpHandler.java:82)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at com.sun.net.httpserver.Filter$Chain.doFilter(Filter.java:79)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at sun.net.httpserver.AuthFilter.doFilter(AuthFilter.java:83)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at com.sun.net.httpserver.Filter$Chain.doFilter(Filter.java:82)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at sun.net.httpserver.ServerImpl$Exchange$LinkHandler.handle(ServerImpl.java:675)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at com.sun.net.httpserver.Filter$Chain.doFilter(Filter.java:79)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at stream.Main$2.doFilter(Main.java:253)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at com.sun.net.httpserver.Filter$Chain.doFilter(Filter.java:82)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at sun.net.httpserver.ServerImpl$Exchange.run(ServerImpl.java:645)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1149)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:624)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 	at java.lang.Thread.run(Thread.java:748)
+2025-09-06 00:00:38.802 [T00054696] [ERR] - 
+2025-09-06 00:00:38.902 [T00013438] [INF] - {"status":200,"status_description":"Operation completed successfully","data":{"client_id":"49275362","masked_name":"E. Ta****","balance_amount":-9.49,"balance_currency":"azn"}}
