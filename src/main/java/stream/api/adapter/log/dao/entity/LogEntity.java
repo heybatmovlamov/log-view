@@ -1,4 +1,4 @@
-package stream.api.adapter.log.entity;
+package stream.api.adapter.log.dao.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
@@ -11,10 +11,7 @@ public class LogEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
-
     private String timestamp;
-    private String transactionId;
-    private String errorName;
+    private String threadId;
     private String description;
-    private String adapterName;
 }
