@@ -28,6 +28,6 @@ public class LogController {
 
     @GetMapping("/{serial}")
     public void getLogSaverService(@PathVariable String serial) {
-        service.findByOrdinatorOrReference("C:/Users/user/Desktop/streams/steam.log",serial);
+        service.findByOrdinatorOrReference("C:/Users/user/Desktop/stream.log",serial);
     }
 }

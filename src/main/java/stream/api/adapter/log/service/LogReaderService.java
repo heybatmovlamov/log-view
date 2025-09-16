@@ -167,10 +167,11 @@ public class LogReaderService {
             String line = logs.get(i);
 
             if (line.contains("Serial:") && line.contains(rowSerial)) {
-
+                System.out.println(line);
                 // Geri gedərək REQ: Pay tap
                 for (int j = i; j >= 0; j--) {
                     String previousLine = logs.get(j);
+
                     if (previousLine.contains("REQ: Pay")) {
                         int start = previousLine.indexOf('[');
                         int end = previousLine.indexOf(']', start);
@@ -181,7 +182,7 @@ public class LogReaderService {
                         }
                     }
                     if (previousLine.contains("REQ: GetPayment")) {
-                        break;
+                        continue; // Sadəcə keç, dayanmır
                     }
                 }
                 break;
