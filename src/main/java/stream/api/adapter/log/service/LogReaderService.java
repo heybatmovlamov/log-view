@@ -95,17 +95,39 @@ public class LogReaderService {
         List<String> allLogs = readAllLogs(filePath);
         List<String> strings = readLogs(filePath, serial);
 
+        if (strings == null || strings.isEmpty()) {
+            System.out.println("No log lines found for the given serial.");
+            return;
+        }
+
         String paySerial = strings.get(strings.size() - 1);
 
         List<LogRequest> requests = extractField(strings);
-        String threadId = requests.get(0).getThreadId();
-        String timestamp = requests.get(0).getTimestamp();
+        if (requests == null || requests.isEmpty()) {
+            System.out.println("Could not extract thread/timestamp from lines.");
+            return;
+        }
+        String threadId = Optional.ofNullable(requests.get(0).getThreadId()).orElse("");
+        String timestamp = Optional.ofNullable(requests.get(0).getTimestamp()).orElse("");
+        if (threadId.isEmpty() || timestamp.isEmpty()) {
+            System.out.println("ThreadId or timestamp is empty.");
+            return;
+        }
 
         List<String> register = getRegister(allLogs, threadId, timestamp);
         List<String> payment = getPayment(allLogs, paySerial);
 
+        if (register.isEmpty()) {
+            System.out.println("Register block not found.");
+            return;
+        }
+
         String detailList = register.stream().filter(line -> line.contains("Detail list: [id:")).toList().toString();
         String id = getId(detailList);
+        if (id == null || id.isBlank()) {
+            System.out.println("ID not found in register detail list.");
+            return;
+        }
         List<String> billList = getBillList(allLogs, id);
 
         billList.forEach(System.out::println);
@@ -229,11 +251,23 @@ public class LogReaderService {
     private String getId(String line){
         String search = "id: ";
         String id = "";
+        if (line == null || line.isEmpty()) {
+            System.out.println("Line is empty while searching ID.");
+            return id;
+        }
         int startIndex = line.indexOf(search);
         if (startIndex != -1) {
             startIndex += search.length();
             int endIndex = line.indexOf(",", startIndex);
-             id = line.substring(startIndex, endIndex).trim();
+            if (endIndex == -1) {
+                endIndex = line.indexOf("]", startIndex);
+            }
+            if (endIndex == -1) {
+                endIndex = line.length();
+            }
+            if (startIndex <= endIndex && startIndex >= 0 && endIndex <= line.length()) {
+                id = line.substring(startIndex, endIndex).trim();
+            }
         } else {
             System.out.println("ID tapılmadı.");
         }
