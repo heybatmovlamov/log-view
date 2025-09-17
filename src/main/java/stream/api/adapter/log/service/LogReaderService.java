@@ -84,58 +84,28 @@ public class LogReaderService {
         return logRequests;
     }
 
-//    public  List<LogEntity> serviceRun(String filePath) {
-//        List<String> strings = readErrorLogs(filePath);
-//        List<LogRequest> logRequests = extractField(strings);
-//
-//        return saverService.saveAll(logRequests);
-//    }
-
     public void findByOrdinatorOrReference(String filePath,String serial){
         List<String> allLogs = readAllLogs(filePath);
         List<String> strings = readLogs(filePath, serial);
 
-        if (strings == null || strings.isEmpty()) {
-            System.out.println("No log lines found for the given serial.");
-            return;
-        }
-
         String paySerial = strings.get(strings.size() - 1);
 
+
         List<LogRequest> requests = extractField(strings);
-        if (requests == null || requests.isEmpty()) {
-            System.out.println("Could not extract thread/timestamp from lines.");
-            return;
-        }
-        String threadId = Optional.ofNullable(requests.get(0).getThreadId()).orElse("");
-        String timestamp = Optional.ofNullable(requests.get(0).getTimestamp()).orElse("");
-        if (threadId.isEmpty() || timestamp.isEmpty()) {
-            System.out.println("ThreadId or timestamp is empty.");
-            return;
-        }
+        String threadId = requests.get(0).getThreadId();
+        String timestamp = requests.get(0).getTimestamp();
 
         List<String> register = getRegister(allLogs, threadId, timestamp);
         List<String> payment = getPayment(allLogs, paySerial);
 
-        if (register.isEmpty()) {
-            System.out.println("Register block not found.");
-            return;
-        }
-
         String detailList = register.stream().filter(line -> line.contains("Detail list: [id:")).toList().toString();
         String id = getId(detailList);
-        if (id == null || id.isBlank()) {
-            System.out.println("ID not found in register detail list.");
-            return;
-        }
         List<String> billList = getBillList(allLogs, id);
 
         billList.forEach(System.out::println);
         register.forEach(System.out::println);
         payment.forEach(System.out::println);
     }
-
-
 
     private List<String> readAllLogs(String filePath) {
         try (Stream<String> lines = Files.lines(Paths.get(filePath))) {
@@ -145,7 +115,7 @@ public class LogReaderService {
         }
     }
 
-    public static List<String> getRegister(List<String> logs, String threadId, String targetTimestamp) {
+    private  List<String> getRegister(List<String> logs, String threadId, String targetTimestamp) {
         int resIndex = -1;
 
         for (int i = 0; i < logs.size(); i++) {
@@ -186,31 +156,33 @@ public class LogReaderService {
         return result;
     }
 
-    public static List<String> getPayment(List<String> logs, String serial) {
+    private  List<String> getPayment(List<String> logs, String serial) {
         int serialIndex = -1;
         String threadId = null;
 
-        // 1. Serial olan və REQ: Pay blokuna aid olan threadId-ni tap
+
+        String rowSerial = serial.split("Serial:")[1].trim();
+        // 1. "serial:" olan və Pay ilə bağlı olan threadId-ni tap
         for (int i = 0; i < logs.size(); i++) {
             String line = logs.get(i);
-            if (line.contains("Serial:") && line.contains(serial)) {
 
-                // Geri gedərək "REQ: Pay" sətrini tapmağa çalış
+            if (line.contains("Serial:") && line.contains(rowSerial)) {
+                System.out.println(line);
+                // Geri gedərək REQ: Pay tap
                 for (int j = i; j >= 0; j--) {
                     String previousLine = logs.get(j);
+
                     if (previousLine.contains("REQ: Pay")) {
-                        // threadId-ni tap
                         int start = previousLine.indexOf('[');
                         int end = previousLine.indexOf(']', start);
                         if (start != -1 && end != -1) {
                             threadId = previousLine.substring(start + 1, end);
-                            serialIndex = j; // REQ: Pay sətrinin index-i
+                            serialIndex = j;
                             break;
                         }
                     }
-                    // Əgər REQ: GetPayment tapılıbsa, bu blok deyil → dayandır
                     if (previousLine.contains("REQ: GetPayment")) {
-                        break;
+                        continue; // Sadəcə keç, dayanmır
                     }
                 }
                 break;
@@ -222,12 +194,14 @@ public class LogReaderService {
             return Collections.emptyList();
         }
 
-        // 2. REQ: Pay-dən başlayaraq RES: Pay sətrinə qədər yığ
+        // 2. Pay istəyinin cavablarını yığ
         List<String> result = new ArrayList<>();
         boolean started = false;
+        boolean done = false;
 
         for (int i = serialIndex; i < logs.size(); i++) {
             String line = logs.get(i);
+
             if (line.contains("[" + threadId + "]")) {
                 if (!started && line.contains("REQ: Pay")) {
                     started = true;
@@ -236,11 +210,22 @@ public class LogReaderService {
                 if (started) {
                     result.add(line);
                     if (line.contains("RES: Pay")) {
+                        result.add(logs.get(i+1));
+                        if (line.contains("[ERR] - RES: Pay")) {
+                            result.add(logs.get(i+2));
+                            result.add(logs.get(i+3));
+                        }
+                        done = true;
                         break;
                     }
                 }
-            } else if (started) {
-                // Əgər başqa thread-ə keçibsə və artıq yığmağa başlamışıqsa, bitir
+            } else if (started && !line.contains("[")) {
+                // log xətti boş və ya parse edilə bilməyən xəttdirsə → əlavə et
+                result.add(line);
+            } else if (started && !done) {
+                // başqa thread gəlib, amma hələ bizim RES gəlməyib → gözləməyə davam
+                continue;
+            } else if (done) {
                 break;
             }
         }
@@ -251,37 +236,31 @@ public class LogReaderService {
     private String getId(String line){
         String search = "id: ";
         String id = "";
-        if (line == null || line.isEmpty()) {
-            System.out.println("Line is empty while searching ID.");
-            return id;
-        }
         int startIndex = line.indexOf(search);
         if (startIndex != -1) {
             startIndex += search.length();
-            int endIndex = line.indexOf(",", startIndex);
-            if (endIndex == -1) {
+            int endIndex = -1;
+            if(line.contains(",")){
+                 endIndex = line.indexOf(",", startIndex);
+            }else {
                 endIndex = line.indexOf("]", startIndex);
             }
-            if (endIndex == -1) {
-                endIndex = line.length();
-            }
-            if (startIndex <= endIndex && startIndex >= 0 && endIndex <= line.length()) {
-                id = line.substring(startIndex, endIndex).trim();
-            }
+             id = line.substring(startIndex, endIndex).trim();
         } else {
             System.out.println("ID tapılmadı.");
         }
         return id;
     }
 
-    public List<String> getBillList(List<String> logs, String id){
-        int serialIndex = -1;
+    private  List<String> getBillList(List<String> logs, String id) {
+        int idIndex = -1;
         String threadId = null;
 
+        // 1. "id:" olan və GetBillList ilə bağlı olan threadId-ni tap
         for (int i = 0; i < logs.size(); i++) {
             String line = logs.get(i);
             if (line.contains("id:") && line.contains(id)) {
-
+                // Geri gedərək REQ: GetBillList tap
                 for (int j = i; j >= 0; j--) {
                     String previousLine = logs.get(j);
                     if (previousLine.contains("REQ: GetBillList")) {
@@ -289,7 +268,7 @@ public class LogReaderService {
                         int end = previousLine.indexOf(']', start);
                         if (start != -1 && end != -1) {
                             threadId = previousLine.substring(start + 1, end);
-                            serialIndex = j;
+                            idIndex = j;
                             break;
                         }
                     }
@@ -301,16 +280,19 @@ public class LogReaderService {
             }
         }
 
-        if (serialIndex == -1 || threadId == null) {
+        if (idIndex == -1 || threadId == null) {
             System.out.println("REQ: GetBillList bloku tapılmadı.");
             return Collections.emptyList();
         }
 
+        // 2. GetBillList istəyinin cavablarını yığ
         List<String> result = new ArrayList<>();
         boolean started = false;
+        boolean done = false;
 
-        for (int i = serialIndex; i < logs.size(); i++) {
+        for (int i = idIndex; i < logs.size(); i++) {
             String line = logs.get(i);
+
             if (line.contains("[" + threadId + "]")) {
                 if (!started && line.contains("REQ: GetBillList")) {
                     started = true;
@@ -319,15 +301,22 @@ public class LogReaderService {
                 if (started) {
                     result.add(line);
                     if (line.contains("RES: GetBillList")) {
+                        result.add(logs.get(i+1));
+                        done = true;
                         break;
                     }
                 }
-            } else if (started) {
+            } else if (started && !line.contains("[")) {
+                // log xətti boş və ya parse edilə bilməyən xəttdirsə → əlavə et
+                result.add(line);
+            } else if (started && !done) {
+                // başqa thread gəlib, amma hələ bizim RES gəlməyib → gözləməyə davam
+                continue;
+            } else if (done) {
                 break;
             }
         }
 
         return result;
     }
-
 }

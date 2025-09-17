@@ -1,13 +1,27 @@
 package stream.api.adapter.log.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
-import stream.api.adapter.log.service.ExceptionMonitorService;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.*;
+import stream.api.adapter.log.dao.entity.LogEntity;
 import stream.api.adapter.log.service.LogReaderService;
+import stream.api.adapter.log.service.LogSaverService;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.List;
+
+import static org.springframework.boot.logging.LoggingSystemProperty.LOG_PATH;
 
 @RestController
 @RequiredArgsConstructor
+@RequestMapping("/api/filter")
 public class LogController {
 
     private final LogReaderService service;
@@ -19,8 +33,8 @@ public class LogController {
         return "Triggered manual exception scan. Check application console logs.";
     }
 
-    @GetMapping
-    public void getLogSaverService() {
-        service.findByOrdinatorOrReference("C:/Users/user/Desktop/stream.log", "D7D78073B73640D2BE663406CD85B60F");
+    @GetMapping("/{serial}")
+    public void getLogSaverService(@PathVariable String serial) {
+        service.findByOrdinatorOrReference("C:/Users/user/Desktop/stream.log",serial);
     }
 }
