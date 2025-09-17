@@ -8,7 +8,6 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import stream.api.adapter.log.dao.entity.LogEntity;
-import stream.api.adapter.log.service.ExceptionMonitorService;
 import stream.api.adapter.log.service.LogReaderService;
 import stream.api.adapter.log.service.LogSaverService;
 
