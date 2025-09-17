@@ -52,15 +52,12 @@ public class LogReaderService {
     private List<LogRequest> extractField(List<String> log) {
         String timestampPattern = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}"; // Timestamp
         String threadPattern = "\\[T\\d+\\]";
-        String exceptionPattern = "- (.*)";
 
         String timestamp = "";
         String threadId = "";
-        String exception = "";
 
         Pattern timestampPat = Pattern.compile(timestampPattern);
         Pattern threadPat = Pattern.compile(threadPattern);
-        Pattern exceptionPat = Pattern.compile(exceptionPattern);
 
         List<LogRequest> logRequests = new ArrayList<>();
         for(String logLine : log) {
@@ -90,7 +87,6 @@ public class LogReaderService {
 
         String paySerial = strings.get(strings.size() - 1);
 
-
         List<LogRequest> requests = extractField(strings);
         String threadId = requests.get(0).getThreadId();
         String timestamp = requests.get(0).getTimestamp();
@@ -98,7 +94,11 @@ public class LogReaderService {
         List<String> register = getRegister(allLogs, threadId, timestamp);
         List<String> payment = getPayment(allLogs, paySerial);
 
-        String detailList = register.stream().filter(line -> line.contains("Detail list: [id:")).toList().toString();
+        List<String> list = register.stream().filter(line -> line.contains("Detail list: [id:")).toList();
+        String detailList = list.toString();
+        if (list.isEmpty()) {
+            detailList = register.stream().filter(line -> line.contains("id:")).toList().toString();
+        }
         String id = getId(detailList);
         List<String> billList = getBillList(allLogs, id);
 
@@ -156,36 +156,58 @@ public class LogReaderService {
         return result;
     }
 
-    private  List<String> getPayment(List<String> logs, String serial) {
+    private List<String> getPayment(List<String> logs, String serial) {
         int serialIndex = -1;
         String threadId = null;
 
-
         String rowSerial = serial.split("Serial:")[1].trim();
-        // 1. "serial:" olan və Pay ilə bağlı olan threadId-ni tap
+
+        // 1. "serial:" olan sətri tap
         for (int i = 0; i < logs.size(); i++) {
             String line = logs.get(i);
 
             if (line.contains("Serial:") && line.contains(rowSerial)) {
-                System.out.println(line);
-                // Geri gedərək REQ: Pay tap
+
+                boolean found = false;
+
+                // Əvvəlcə geriyə bax
                 for (int j = i; j >= 0; j--) {
                     String previousLine = logs.get(j);
-
                     if (previousLine.contains("REQ: Pay")) {
                         int start = previousLine.indexOf('[');
                         int end = previousLine.indexOf(']', start);
                         if (start != -1 && end != -1) {
                             threadId = previousLine.substring(start + 1, end);
                             serialIndex = j;
+                            found = true; // tapıldı
                             break;
                         }
                     }
                     if (previousLine.contains("REQ: GetPayment")) {
-                        continue; // Sadəcə keç, dayanmır
+                        break;
                     }
                 }
-                break;
+
+                // Əgər yuxarıda tapılmadısa, onda aşağıya bax
+                if (!found) {
+                    for (int j = i; j < logs.size(); j++) {
+                        String nextLine = logs.get(j);
+
+                        if (nextLine.contains("REQ: Pay")) {
+                            int start = nextLine.indexOf('[');
+                            int end = nextLine.indexOf(']', start);
+                            if (start != -1 && end != -1) {
+                                threadId = nextLine.substring(start + 1, end);
+                                serialIndex = j;
+                                break;
+                            }
+                        }
+
+                        // Burada "REQ: GetPayment" görsək belə, davam edirik
+                    }
+                }
+
+                break; // serial tapıldıqdan sonra artıq əsas döngüdən çıx
             }
         }
 
@@ -210,10 +232,11 @@ public class LogReaderService {
                 if (started) {
                     result.add(line);
                     if (line.contains("RES: Pay")) {
-                        result.add(logs.get(i+1));
+                        // Sonrakı xətləri də əlavə et
+                        if (i + 1 < logs.size()) result.add(logs.get(i + 1));
                         if (line.contains("[ERR] - RES: Pay")) {
-                            result.add(logs.get(i+2));
-                            result.add(logs.get(i+3));
+                            if (i + 2 < logs.size()) result.add(logs.get(i + 2));
+                            if (i + 3 < logs.size()) result.add(logs.get(i + 3));
                         }
                         done = true;
                         break;
@@ -223,8 +246,7 @@ public class LogReaderService {
                 // log xətti boş və ya parse edilə bilməyən xəttdirsə → əlavə et
                 result.add(line);
             } else if (started && !done) {
-                // başqa thread gəlib, amma hələ bizim RES gəlməyib → gözləməyə davam
-                continue;
+                continue; // başqa thread gəlib, amma hələ bizim RES gəlməyib → gözləməyə davam
             } else if (done) {
                 break;
             }
@@ -233,6 +255,8 @@ public class LogReaderService {
         return result;
     }
 
+
+
     private String getId(String line){
         String search = "id: ";
         String id = "";
@@ -240,10 +264,10 @@ public class LogReaderService {
         if (startIndex != -1) {
             startIndex += search.length();
             int endIndex = -1;
-            if(line.contains(",")){
-                 endIndex = line.indexOf(",", startIndex);
+            if(line.contains("]")){
+                 endIndex = line.indexOf("]", startIndex);
             }else {
-                endIndex = line.indexOf("]", startIndex);
+                endIndex = line.indexOf(",", startIndex);
             }
              id = line.substring(startIndex, endIndex).trim();
         } else {
@@ -259,7 +283,8 @@ public class LogReaderService {
         // 1. "id:" olan və GetBillList ilə bağlı olan threadId-ni tap
         for (int i = 0; i < logs.size(); i++) {
             String line = logs.get(i);
-            if (line.contains("id:") && line.contains(id)) {
+            if (line.contains("Detail list: [id: "+id) || line.contains(id)) {
+                System.out.println(line);
                 // Geri gedərək REQ: GetBillList tap
                 for (int j = i; j >= 0; j--) {
                     String previousLine = logs.get(j);
