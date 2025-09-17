@@ -91,7 +91,7 @@ public class ExceptionMonitorService {
             if (lines.isEmpty()){
                 logger.warn("No log found");
                 return;
-            };
+            }
 
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime from = now.minusHours(1);
@@ -214,7 +214,7 @@ public class ExceptionMonitorService {
         try {
             List<String> lines = readAllLines(Paths.get(logFilePath));
             if (lines.isEmpty()) {
-                System.out.println("[LogMonitorTest] No lines in log file: " + logFilePath);
+                logger.info("[LogMonitorTest] No lines in log file: {}", logFilePath);
                 return;
             }
             LocalDateTime now = LocalDateTime.now();
@@ -224,17 +224,16 @@ public class ExceptionMonitorService {
             List<String> devOnly = filterDeveloperExceptions(blocks);
             List<String> suspicious = dedupeBlocks(devOnly);
             if (suspicious.isEmpty()) {
-                System.out.println("[LogMonitorTest] No suspicious exceptions found.");
+                logger.info("[LogMonitorTest] No suspicious exceptions found.");
             } else {
-                System.out.println("[LogMonitorTest] Found " + suspicious.size() + " unique suspicious exception block(s):");
+                logger.info("[LogMonitorTest] Found {} unique suspicious exception block(s):", suspicious.size());
                 for (int i = 0; i < suspicious.size(); i++) {
-                    System.out.println("\n===== Exception Block #" + (i + 1) + " =====\n");
-                    System.out.println(suspicious.get(i));
+                    logger.info("===== Exception Block #{} =====\n{}\n", (i + 1), suspicious.get(i));
                 }
                 sendEmail(now, suspicious);
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            logger.error("[LogMonitorTest] Unexpected error while scanning logs", e);
         }
     }
 
