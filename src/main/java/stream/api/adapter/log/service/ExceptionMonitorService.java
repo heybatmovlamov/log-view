@@ -47,20 +47,8 @@ public class ExceptionMonitorService {
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
     private static final Pattern EXCEPTION_LINE = Pattern.compile(".*(Exception|Error)[: ].*", Pattern.CASE_INSENSITIVE);
-    private static final String TS_REGEX =
-            "\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} \\[[^\\]]+\\] \\[[A-Z]{3}\\] - ";
 
-    // === Yeni util: blok formatlama ===
-    private static String formatBlockForEmail(String block, String nl) {
-        String s = block.replaceAll("\\u001B\\[[;\\d]*m", ""); // ANSI rəng kodlarını sil
-        s = s.replaceAll("(?<!^)\\s*(?=" + TS_REGEX + ")", nl); // hər yeni timestamp-dən əvvəl newline
-        s = s.replaceAll("\\s+(?=\\tat\\s)", nl)
-                .replaceAll("\\s+(?=Caused by:)", nl)
-                .replaceAll("\\s+(?=\\.\\.\\. \\d+ more\\b)", nl);
-        s = s.replaceAll("\\r?\\n", nl).trim();
-        return s;
-    }
-
+    // (İstəsən saxla; hazırda istifadə olunmur)
     private static String signatureOf(String block) {
         String s = block
                 .replaceAll("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} \\[[^]]+] \\[[A-Z]{3}] - ", "")
@@ -222,7 +210,7 @@ public class ExceptionMonitorService {
                 return;
             }
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime from = now.minusHours(4);
+            LocalDateTime from = now.minusHours(10);
             List<String> window = filterByLastHour(lines, from, now);
             List<String> blocks = findExceptionBlocks(window);
             List<String> devOnly = filterDeveloperExceptions(blocks);
@@ -242,33 +230,58 @@ public class ExceptionMonitorService {
         }
     }
 
-    // === Yenilənmiş sendEmail ===
+    // --- HTML escape helper (logları olduğu kimi göstərmək üçün) ---
+    private static String escapeHtml(String s) {
+        if (s == null) return "";
+        StringBuilder out = new StringBuilder(Math.max(16, s.length()));
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '&': out.append("&amp;"); break;
+                case '<': out.append("&lt;"); break;
+                case '>': out.append("&gt;"); break;
+                case '"': out.append("&quot;"); break;
+                case '\'': out.append("&#39;"); break;
+                default: out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    // === HTML <pre> ilə göndərilən, sətir-sətir görünən versiya ===
     private void sendEmail(LocalDateTime now, List<String> blocks) {
         if (recipients == null || recipients.isBlank()) {
             log.warn("No recipients configured for log monitor email. Skipping send.");
             return;
         }
         LocalDateTime from = now.minusHours(1);
-        // Sadə tire istifadə edin ki, ? kimi görünməsin
         String window = from.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00"))
                 + " - " + now.format(DateTimeFormatter.ofPattern("HH:00"));
         String subject = String.format("[YIGIM Log Monitor] %d exception(s) in last hour · %s",
                 blocks.size(), window);
 
-        StringBuilder sb = new StringBuilder();
-        String nl = "\r\n";
-        sb.append("Log Monitor Notification").append(nl);
-        sb.append("Time window: ").append(window).append(nl);
-        sb.append("Found ").append(blocks.size()).append(" exception block(s).").append(nl);
-        sb.append("Recipients: ").append(recipients).append(nl).append(nl);
+        // Header hissəsini də HTML-də veririk
+        String headerHtml =
+                "<div><b>Log Monitor Notification</b></div>" +
+                        "<div>Time window: " + escapeHtml(window) + "</div>" +
+                        "<div>Found " + blocks.size() + " exception block(s).</div>" +
+                        "<div>Recipients: " + escapeHtml(recipients) + "</div>" +
+                        "<br/>";
 
-        // **Heç bir əlavə dəyişiklik etmədən blokları olduğu kimi əlavə et**
+        // Blokları OLDUĞU KİMİ, heç bir regex/formatlamasız, yalnız HTML-escape edib <pre> içində göstəririk
+        StringBuilder logsAsHtml = new StringBuilder();
+        logsAsHtml.append("<pre style=\"font-family:monospace;white-space:pre-wrap;word-wrap:break-word;\">");
         for (int i = 0; i < blocks.size(); i++) {
-            sb.append("==== Block #").append(i + 1).append(" ====").append(nl);
-            sb.append(blocks.get(i)).append(nl);   // olduğu kimi yaz
-            sb.append("====================").append(nl).append(nl);
+            logsAsHtml.append("==== Block #").append(i + 1).append(" ====\n");
+            logsAsHtml.append(escapeHtml(blocks.get(i))).append("\n");
+            logsAsHtml.append("====================\n\n");
         }
-        String body = sb.toString().trim();
+        logsAsHtml.append("</pre>");
+
+        String htmlBody = "<html><body>" + headerHtml + logsAsHtml + "</body></html>";
+
+        // Çox vaxt notification servisləri HTML-i dəstəkləyir; ayrıca sahə yoxdursa, text kimi ötürsək də mail müştəriləri render edəcək.
+        String bodyToSend = htmlBody;
 
         String[] toList = Arrays.stream(recipients.split(","))
                 .map(String::trim)
@@ -287,7 +300,7 @@ public class ExceptionMonitorService {
             String notificationEndpoint = notificationUrl + "api/mail/send";
             CommonRequest req = new CommonRequest();
             req.setModule(notificationModule);
-            req.setText("Subject: " + subject + "\n\n" + body);
+            req.setText("Subject: " + subject + "\n\n" + bodyToSend); // varsa HTML sahəsinə qoymaq daha ideal olar
             req.setReceiver(toList);
             req.setSender(notificationSender);
             restTemplate.postForEntity(notificationEndpoint, req, Void.class);
@@ -297,5 +310,4 @@ public class ExceptionMonitorService {
             log.error("Failed to post log monitor notification to {}", notificationUrl, ex);
         }
     }
-
 }
