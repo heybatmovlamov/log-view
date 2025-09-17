@@ -1,7 +1,8 @@
 package stream.api.adapter.log.service;
 
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -17,10 +18,9 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Pattern;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class ExceptionMonitorService {
+    private Logger logger = LoggerFactory.getLogger(ExceptionMonitorService.class);
 
     private final RestTemplate restTemplate;
 
@@ -47,6 +47,11 @@ public class ExceptionMonitorService {
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
     private static final Pattern EXCEPTION_LINE = Pattern.compile(".*(Exception|Error)[: ].*", Pattern.CASE_INSENSITIVE);
+
+
+    public ExceptionMonitorService(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     // (İstəsən saxla; hazırda istifadə olunmur)
     private static String signatureOf(String block) {
@@ -83,7 +88,10 @@ public class ExceptionMonitorService {
         if (!enabled) return;
         try {
             List<String> lines = readAllLines(Paths.get(logFilePath));
-            if (lines.isEmpty()) return;
+            if (lines.isEmpty()){
+                logger.warn("No log found");
+                return;
+            };
 
             LocalDateTime now = LocalDateTime.now();
             LocalDateTime from = now.minusHours(1);
@@ -97,7 +105,7 @@ public class ExceptionMonitorService {
                 sendEmail(now, suspicious);
             }
         } catch (Exception e) {
-            log.error("Exception in ExceptionMonitorService:", e);
+            logger.error("Exception in ExceptionMonitorService:", e);
         }
     }
 
@@ -210,7 +218,7 @@ public class ExceptionMonitorService {
                 return;
             }
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime from = now.minusHours(10);
+            LocalDateTime from = now.minusHours(3);
             List<String> window = filterByLastHour(lines, from, now);
             List<String> blocks = findExceptionBlocks(window);
             List<String> devOnly = filterDeveloperExceptions(blocks);
@@ -251,7 +259,7 @@ public class ExceptionMonitorService {
     // === HTML <pre> ilə göndərilən, sətir-sətir görünən versiya ===
     private void sendEmail(LocalDateTime now, List<String> blocks) {
         if (recipients == null || recipients.isBlank()) {
-            log.warn("No recipients configured for log monitor email. Skipping send.");
+            logger.warn("No recipients configured for log monitor email. Skipping send.");
             return;
         }
         LocalDateTime from = now.minusHours(1);
@@ -270,7 +278,7 @@ public class ExceptionMonitorService {
 
         // Blokları OLDUĞU KİMİ, heç bir regex/formatlamasız, yalnız HTML-escape edib <pre> içində göstəririk
         StringBuilder logsAsHtml = new StringBuilder();
-        logsAsHtml.append("<pre style=\"font-family:monospace;white-space:pre-wrap;word-wrap:break-word;\">");
+        logsAsHtml.append("<pre class=\"notranslate\" translate=\"no\" style=\"font-family:monospace;white-space:pre-wrap;word-wrap:break-word;color:#000;background:#fff;\">");
         for (int i = 0; i < blocks.size(); i++) {
             logsAsHtml.append("==== Block #").append(i + 1).append(" ====\n");
             logsAsHtml.append(escapeHtml(blocks.get(i))).append("\n");
@@ -278,7 +286,11 @@ public class ExceptionMonitorService {
         }
         logsAsHtml.append("</pre>");
 
-        String htmlBody = "<html><body>" + headerHtml + logsAsHtml + "</body></html>";
+        String htmlBody = "<html lang=\"en\"><head>" +
+                "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>" +
+                "<meta name=\"google\" content=\"notranslate\"/>" +
+                "<style>body,div,span,p,pre,code,tt,a{color:#000 !important;background:#fff !important;} a{ text-decoration:none; }</style>" +
+                "</head><body class=\"notranslate\" translate=\"no\" style=\"color:#000;background:#fff;\">" + headerHtml + logsAsHtml + "</body></html>";
 
         // Çox vaxt notification servisləri HTML-i dəstəkləyir; ayrıca sahə yoxdursa, text kimi ötürsək də mail müştəriləri render edəcək.
         String bodyToSend = htmlBody;
@@ -289,11 +301,11 @@ public class ExceptionMonitorService {
                 .toArray(String[]::new);
 
         if (toList.length == 0) {
-            log.warn("Recipients string is present but produced no valid emails. Skipping send.");
+            logger.warn("Recipients string is present but produced no valid emails. Skipping send.");
             return;
         }
         if (notificationUrl == null || notificationUrl.isBlank()) {
-            log.warn("Notification URL is not configured. Skipping send.");
+            logger.warn("Notification URL is not configured. Skipping send.");
             return;
         }
         try {
@@ -303,11 +315,12 @@ public class ExceptionMonitorService {
             req.setText("Subject: " + subject + "\n\n" + bodyToSend); // varsa HTML sahəsinə qoymaq daha ideal olar
             req.setReceiver(toList);
             req.setSender(notificationSender);
+            req.setUnicode(true); // ensure raw content preserved
             restTemplate.postForEntity(notificationEndpoint, req, Void.class);
-            log.info("Log monitor notification posted to {}. Recipients: {}, Blocks: {}",
+            logger.info("Log monitor notification posted to {}. Recipients: {}, Blocks: {}",
                     notificationUrl, toList.length, blocks.size());
         } catch (Exception ex) {
-            log.error("Failed to post log monitor notification to {}", notificationUrl, ex);
+            logger.error("Failed to post log monitor notification to {}", notificationUrl, ex);
         }
     }
 }
