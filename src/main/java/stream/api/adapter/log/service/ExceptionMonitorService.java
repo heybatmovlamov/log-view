@@ -1,15 +1,21 @@
 package stream.api.adapter.log.service;
 
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.client.RestTemplate;
 import stream.api.adapter.log.model.request.CommonRequest;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -18,9 +24,18 @@ import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.regex.Pattern;
 
+// PDF
+import com.lowagie.text.Document;
+import com.lowagie.text.Font;
+import com.lowagie.text.FontFactory;
+import com.lowagie.text.PageSize;
+import com.lowagie.text.Paragraph;
+import com.lowagie.text.Element;
+import com.lowagie.text.pdf.PdfWriter;
+
 @Service
 public class ExceptionMonitorService {
-    private Logger logger = LoggerFactory.getLogger(ExceptionMonitorService.class);
+    private static final Logger logger = LoggerFactory.getLogger(ExceptionMonitorService.class);
 
     private final RestTemplate restTemplate;
 
@@ -47,13 +62,25 @@ public class ExceptionMonitorService {
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
     private static final Pattern EXCEPTION_LINE = Pattern.compile(".*(Exception|Error)[: ].*", Pattern.CASE_INSENSITIVE);
+    // Precompiled patterns for performance and readability
+    private static final Pattern STACK_AT = Pattern.compile("^\\s*at\\s+");
+    private static final Pattern CAUSED_BY = Pattern.compile("^\\s*Caused by: ", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DOTS_MORE = Pattern.compile("^\\s*\\.\\.\\.\\s+\\d+\\s+more\\b");
+    private static final Pattern INDENTED_LINE = Pattern.compile("^\\s{4,}\\S");
+
+    // Developer-facing filters
+    private static final Pattern ADAPTER_CODE = Pattern.compile("\\bCode: E\\d{6}\\b");
+    private static final Pattern ADAPTER_DESC = Pattern.compile("\\|- Description: ", Pattern.CASE_INSENSITIVE);
+    private static final Pattern ADAPTER_REASON = Pattern.compile("\\|- Reason: ", Pattern.CASE_INSENSITIVE);
+    private static final Pattern DEV_STACK_FRAME = Pattern.compile("^\\s*at\\s+.+\\(.+\\)");
+    private static final Pattern JAVA_EXCEPTION_NAME = Pattern.compile("java\\.[a-z0-9_.]*Exception|java\\.[a-z0-9_.]*Error", Pattern.CASE_INSENSITIVE);
 
 
     public ExceptionMonitorService(RestTemplate restTemplate) {
         this.restTemplate = restTemplate;
     }
 
-    // (İstəsən saxla; hazırda istifadə olunmur)
+
     private static String signatureOf(String block) {
         String s = block
                 .replaceAll("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} \\[[^]]+] \\[[A-Z]{3}] - ", "")
@@ -102,7 +129,7 @@ public class ExceptionMonitorService {
             List<String> suspicious = dedupeBlocks(devOnly);
 
             if (!suspicious.isEmpty()) {
-                sendEmail(now, suspicious);
+                sendNotification(now, suspicious);
             }
         } catch (Exception e) {
             logger.error("Exception in ExceptionMonitorService:", e);
@@ -166,19 +193,17 @@ public class ExceptionMonitorService {
             }
             if (inBlock) {
                 String core = line.replaceFirst("^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3} \\[[^]]+] \\[[A-Z]{3}] - ", "");
-                boolean isStackOrCause = Pattern.compile("^\\s*at\\s+").matcher(core).find()
-                        || Pattern.compile("^\\s*Caused by: ", Pattern.CASE_INSENSITIVE).matcher(core).find()
-                        || Pattern.compile("^\\s*\\.\\.\\.\\s+\\d+\\s+more\\b").matcher(core).find()
-                        || Pattern.compile("^\\s{4,}\\S").matcher(core).find();
+                boolean isStackOrCause = STACK_AT.matcher(core).find()
+                        || CAUSED_BY.matcher(core).find()
+                        || DOTS_MORE.matcher(core).find()
+                        || INDENTED_LINE.matcher(core).find();
                 if (isStackOrCause) {
                     current.add(line);
                 } else {
                     inBlock = false;
                     current.add(line);
-                    if (!current.isEmpty()) {
-                        result.add(String.join(System.lineSeparator(), current));
-                        current.clear();
-                    }
+                    result.add(String.join(System.lineSeparator(), current));
+                    current.clear();
                 }
             }
         }
@@ -188,23 +213,17 @@ public class ExceptionMonitorService {
 
     private List<String> filterDeveloperExceptions(List<String> blocks) {
         List<String> out = new ArrayList<>();
-        Pattern codePattern = Pattern.compile("\\bCode: E\\d{6}\\b");
-        Pattern adapterDesc = Pattern.compile("\\|\\- Description: ", Pattern.CASE_INSENSITIVE);
-        Pattern adapterReason = Pattern.compile("\\|\\- Reason: ", Pattern.CASE_INSENSITIVE);
-        Pattern stackFrame = Pattern.compile("^\\s*at\\s+.+\\(.+\\)");
-        Pattern causedBy = Pattern.compile("^\\s*Caused by: ", Pattern.CASE_INSENSITIVE);
-        Pattern javaExc = Pattern.compile("java\\.[a-z0-9_.]*Exception|java\\.[a-z0-9_.]*Error", Pattern.CASE_INSENSITIVE);
         for (String block : blocks) {
             String lower = block.toLowerCase();
-            boolean looksAdapter = codePattern.matcher(block).find()
-                    || adapterDesc.matcher(block).find()
-                    || adapterReason.matcher(block).find();
+            boolean looksAdapter = ADAPTER_CODE.matcher(block).find()
+                    || ADAPTER_DESC.matcher(block).find()
+                    || ADAPTER_REASON.matcher(block).find();
             if (looksAdapter) {
-                boolean hasStack = stackFrame.matcher(block).find() || causedBy.matcher(block).find();
-                boolean hasJava = javaExc.matcher(lower).find();
+                boolean hasStack = DEV_STACK_FRAME.matcher(block).find() || CAUSED_BY.matcher(block).find();
+                boolean hasJava = JAVA_EXCEPTION_NAME.matcher(lower).find();
                 if (!(hasStack || hasJava)) continue;
             }
-            boolean devLike = javaExc.matcher(lower).find() || stackFrame.matcher(block).find() || causedBy.matcher(block).find();
+            boolean devLike = JAVA_EXCEPTION_NAME.matcher(lower).find() || DEV_STACK_FRAME.matcher(block).find() || CAUSED_BY.matcher(block).find();
             if (devLike) out.add(block);
         }
         return out;
@@ -218,7 +237,7 @@ public class ExceptionMonitorService {
                 return;
             }
             LocalDateTime now = LocalDateTime.now();
-            LocalDateTime from = now.minusHours(3);
+            LocalDateTime from = now.minusHours(30);
             List<String> window = filterByLastHour(lines, from, now);
             List<String> blocks = findExceptionBlocks(window);
             List<String> devOnly = filterDeveloperExceptions(blocks);
@@ -230,74 +249,59 @@ public class ExceptionMonitorService {
                 for (int i = 0; i < suspicious.size(); i++) {
                     logger.info("===== Exception Block #{} =====\n{}\n", (i + 1), suspicious.get(i));
                 }
-                sendEmail(now, suspicious);
+                sendNotification(now, suspicious);
             }
         } catch (Exception e) {
             logger.error("[LogMonitorTest] Unexpected error while scanning logs", e);
         }
     }
 
-    // --- HTML escape helper (logları olduğu kimi göstərmək üçün) ---
-    private static String escapeHtml(String s) {
-        if (s == null) return "";
-        StringBuilder out = new StringBuilder(Math.max(16, s.length()));
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '&': out.append("&amp;"); break;
-                case '<': out.append("&lt;"); break;
-                case '>': out.append("&gt;"); break;
-                case '"': out.append("&quot;"); break;
-                case '\'': out.append("&#39;"); break;
-                default: out.append(c);
-            }
+    // === PDF generator ===
+    private byte[] generatePdf(String window, List<String> blocks) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        Document document = new Document(PageSize.A4.rotate(), 36, 36, 36, 36);
+        PdfWriter.getInstance(document, baos);
+        document.open();
+
+        Font titleFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14);
+        Font normalFont = FontFactory.getFont(FontFactory.HELVETICA, 10);
+        Font monoFont = FontFactory.getFont(FontFactory.COURIER, 9);
+
+        Paragraph title = new Paragraph("Log Monitor Exceptions", titleFont);
+        title.setAlignment(Element.ALIGN_LEFT);
+        document.add(title);
+        document.add(new Paragraph("Time window: " + window, normalFont));
+        document.add(new Paragraph("Blocks found: " + blocks.size(), normalFont));
+        document.add(new Paragraph(" ", normalFont));
+
+        for (int i = 0; i < blocks.size(); i++) {
+            String header = String.format("==== Block #%d ====", i + 1);
+            document.add(new Paragraph(header, titleFont));
+            String text = blocks.get(i);
+            Paragraph p = new Paragraph(text.replace("\r\n", "\n"), monoFont);
+            p.setLeading(12f);
+            document.add(p);
+            document.add(new Paragraph("\n\n", normalFont));
         }
-        return out.toString();
+
+        document.close();
+        return baos.toByteArray();
     }
 
-    // === HTML <pre> ilə göndərilən, sətir-sətir görünən versiya ===
-    private void sendEmail(LocalDateTime now, List<String> blocks) {
+    private void sendNotification(LocalDateTime now, List<String> blocks) {
         if (recipients == null || recipients.isBlank()) {
             logger.warn("No recipients configured for log monitor email. Skipping send.");
             return;
         }
-        LocalDateTime from = now.minusHours(1);
-        String window = from.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00"))
-                + " - " + now.format(DateTimeFormatter.ofPattern("HH:00"));
+        String window = buildTimeWindow(now);
         String subject = String.format("[YIGIM Log Monitor] %d exception(s) in last hour · %s",
                 blocks.size(), window);
 
-        // Header hissəsini də HTML-də veririk
-        String headerHtml =
-                "<div><b>Log Monitor Notification</b></div>" +
-                        "<div>Time window: " + escapeHtml(window) + "</div>" +
-                        "<div>Found " + blocks.size() + " exception block(s).</div>" +
-                        "<div>Recipients: " + escapeHtml(recipients) + "</div>" +
-                        "<br/>";
+        // NOTE: Per request, do NOT include error details in the email body anymore. Only send the PDF attachment.
+        // The following HTML construction is intentionally removed/commented out.
+        // String htmlBody = ...; // removed
 
-        // Blokları OLDUĞU KİMİ, heç bir regex/formatlamasız, yalnız HTML-escape edib <pre> içində göstəririk
-        StringBuilder logsAsHtml = new StringBuilder();
-        logsAsHtml.append("<pre class=\"notranslate\" translate=\"no\" style=\"font-family:monospace;white-space:pre-wrap;word-wrap:break-word;color:#000;background:#fff;\">");
-        for (int i = 0; i < blocks.size(); i++) {
-            logsAsHtml.append("==== Block #").append(i + 1).append(" ====\n");
-            logsAsHtml.append(escapeHtml(blocks.get(i))).append("\n");
-            logsAsHtml.append("====================\n\n");
-        }
-        logsAsHtml.append("</pre>");
-
-        String htmlBody = "<html lang=\"en\"><head>" +
-                "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=UTF-8\"/>" +
-                "<meta name=\"google\" content=\"notranslate\"/>" +
-                "<style>body,div,span,p,pre,code,tt,a{color:#000 !important;background:#fff !important;} a{ text-decoration:none; }</style>" +
-                "</head><body class=\"notranslate\" translate=\"no\" style=\"color:#000;background:#fff;\">" + headerHtml + logsAsHtml + "</body></html>";
-
-        // Çox vaxt notification servisləri HTML-i dəstəkləyir; ayrıca sahə yoxdursa, text kimi ötürsək də mail müştəriləri render edəcək.
-        String bodyToSend = htmlBody;
-
-        String[] toList = Arrays.stream(recipients.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .toArray(String[]::new);
+        String[] toList = parseRecipients(recipients);
 
         if (toList.length == 0) {
             logger.warn("Recipients string is present but produced no valid emails. Skipping send.");
@@ -311,15 +315,71 @@ public class ExceptionMonitorService {
             String notificationEndpoint = notificationUrl + "api/mail/send";
             CommonRequest req = new CommonRequest();
             req.setModule(notificationModule);
-            req.setText("Subject: " + subject + "\n\n" + bodyToSend); // varsa HTML sahəsinə qoymaq daha ideal olar
+
+            // Build PDF attachment from logs
+            byte[] pdfBytes = generatePdf(window, blocks);
+            String base64Pdf = Base64.getEncoder().encodeToString(pdfBytes);
+            String fileName = "log-errors-" + now.format(DateTimeFormatter.ofPattern("yyyyMMdd-HHmm")) + ".pdf";
+            Map<String, String> attachmentMap = new HashMap<>();
+            attachmentMap.put(fileName, base64Pdf);
+            req.setAttachmentMap(attachmentMap);
+
+            // Set a minimal body without any embedded logs
+            String minimalBody = "Subject: " + subject + "\n\nPlease see the attached PDF for detailed exception logs.";
+            req.setText(minimalBody);
             req.setReceiver(toList);
             req.setSender(notificationSender);
-            req.setUnicode(true); // ensure raw content preserved
+            req.setUnicode(true);
             restTemplate.postForEntity(notificationEndpoint, req, Void.class);
-            logger.info("Log monitor notification posted to {}. Recipients: {}, Blocks: {}",
-                    notificationUrl, toList.length, blocks.size());
+            sendTelegramMultipart(subject, pdfBytes, fileName);
+            logger.info("Log monitor notifications posted (mail: JSON, telegram: multipart) to {}. Recipients: {}, Blocks: {}, Attachment: {} bytes",
+                    notificationUrl, toList.length, blocks.size(), pdfBytes.length);
         } catch (Exception ex) {
             logger.error("Failed to post log monitor notification to {}", notificationUrl, ex);
         }
+    }
+
+    private void sendTelegramMultipart(String message, byte[] pdfBytes, String fileName) {
+        try {
+            MultiValueMap<String, Object> body = new LinkedMultiValueMap<>();
+            if (message != null) {
+                body.add("message", message);
+            }
+
+            ByteArrayResource resource = new ByteArrayResource(pdfBytes) {
+                @Override
+                public String getFilename() {
+                    return fileName;
+                }
+            };
+
+            HttpHeaders partHeaders = new HttpHeaders();
+            partHeaders.setContentType(MediaType.APPLICATION_PDF);
+            HttpEntity<ByteArrayResource> filePart = new HttpEntity<>(resource, partHeaders);
+            body.add("file", filePart);
+
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.MULTIPART_FORM_DATA);
+
+            HttpEntity<MultiValueMap<String, Object>> requestEntity = new HttpEntity<>(body, headers);
+            restTemplate.postForEntity(notificationUrl + "api/telegram/send", requestEntity, Void.class);
+        } catch (Exception e) {
+            logger.error("Failed to send telegram notification to {}", notificationUrl, e);
+        }
+    }
+
+    // Helpers
+    private String buildTimeWindow(LocalDateTime now) {
+        LocalDateTime from = now.minusHours(1);
+        return from.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:00"))
+                + " - " + now.format(DateTimeFormatter.ofPattern("HH:00"));
+    }
+
+    private String[] parseRecipients(String recipientsStr) {
+        if (recipientsStr == null || recipientsStr.isBlank()) return new String[0];
+        return Arrays.stream(recipientsStr.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isBlank())
+                .toArray(String[]::new);
     }
 }
