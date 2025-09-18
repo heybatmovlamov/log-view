@@ -90,7 +90,6 @@ public class LogReaderService {
 
         String detailList = register.stream().filter(line -> line.contains("id:")).toList().toString();
         String id = getId(detailList);
-        System.out.println(id);
         List<String> billList = billList(allLogs, id);
 
         billList.forEach(System.out::println);
@@ -167,24 +166,22 @@ public class LogReaderService {
         return result;
     }
 
-    private List<String> pay(List<String> logs, String serial) {
+    private List<String> pay(List<String> logs, String serialLine) {
         int serialIndex = -1;
         String threadId = null;
 
-        String rowSerial = serial.split("Serial:")[1].trim();
-
+        String rowSerial = serialLine.split("Serial:")[1].trim();
         // 1. "serial:" olan sətri tap
         for (int i = 0; i < logs.size(); i++) {
             String line = logs.get(i);
 
-            if (line.contains("Serial:") && line.contains(rowSerial)) {
-
+            if (line.equals(serialLine)) {
                 boolean found = false;
 
                 // Əvvəlcə geriyə bax
                 for (int j = i; j >= 0; j--) {
                     String previousLine = logs.get(j);
-                    if (previousLine.contains("REQ: Pay")) {
+                    if (previousLine.contains("REQ: Pay") || previousLine.contains("["+threadId+"]")) {
                         int start = previousLine.indexOf('[');
                         int end = previousLine.indexOf(']', start);
                         if (start != -1 && end != -1) {
@@ -193,9 +190,6 @@ public class LogReaderService {
                             found = true; // tapıldı
                             break;
                         }
-                    }
-                    if (previousLine.contains("REQ: GetPayment")) {
-                        break;
                     }
                 }
 
@@ -298,7 +292,7 @@ public class LogReaderService {
                 // Geri gedərək REQ: GetBillList tap
                 for (int j = i; j >= 0; j--) {
                     String previousLine = logs.get(j);
-                    if (previousLine.contains("REQ: GetBillList")) {
+                    if (previousLine.contains("REQ: GetBillList") ) {
                         int start = previousLine.indexOf('[');
                         int end = previousLine.indexOf(']', start);
                         if (start != -1 && end != -1) {
@@ -306,9 +300,6 @@ public class LogReaderService {
                             idIndex = j;
                             break;
                         }
-                    }
-                    if (previousLine.contains("REQ: GetPayment")) {
-                        break;
                     }
                 }
                 break;
