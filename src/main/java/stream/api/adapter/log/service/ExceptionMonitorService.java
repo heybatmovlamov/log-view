@@ -39,25 +39,25 @@ public class ExceptionMonitorService {
 
     private final RestTemplate restTemplate;
 
-    @Value("${log.monitor.enabled:true}")
+    @Value("${log.monitor.enabled}")
     private boolean enabled;
 
-    @Value("${log.monitor.file:src/main/resources/stream.log}")
+    @Value("${log.monitor.file}")
     private String logFilePath;
 
     @Value("${log.monitor.recipients:}")
     private String recipients;
 
-    @Value("${log.monitor.context-lines:6}")
+    @Value("${log.monitor.context-lines}")
     private int contextLines;
 
     @Value("${log.monitor.notification.url:}")
     private String notificationUrl;
 
-    @Value("${log.monitor.notification.module:1}")
+    @Value("${log.monitor.notification.module}")
     private Integer notificationModule;
 
-    @Value("${log.monitor.notification.sender:notification@yigim.az}")
+    @Value("${log.monitor.notification.sender:}")
     private String notificationSender;
 
     private static final DateTimeFormatter TS = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
@@ -133,6 +133,32 @@ public class ExceptionMonitorService {
             }
         } catch (Exception e) {
             logger.error("Exception in ExceptionMonitorService:", e);
+        }
+    }
+    public void printTestLog() {
+        try {
+            List<String> lines = readAllLines(Paths.get(logFilePath));
+            if (lines.isEmpty()) {
+                logger.info("[LogMonitorTest] No lines in log file: {}", logFilePath);
+                return;
+            }
+            LocalDateTime now = LocalDateTime.now();
+            LocalDateTime from = now.minusHours(1);
+            List<String> window = filterByLastHour(lines, from, now);
+            List<String> blocks = findExceptionBlocks(window);
+            List<String> devOnly = filterDeveloperExceptions(blocks);
+            List<String> suspicious = dedupeBlocks(devOnly);
+            if (suspicious.isEmpty()) {
+                logger.info("[LogMonitorTest] No suspicious exceptions found.");
+            } else {
+                logger.info("[LogMonitorTest] Found {} unique suspicious exception block(s):", suspicious.size());
+                for (int i = 0; i < suspicious.size(); i++) {
+                    logger.info("===== Exception Block #{} =====\n{}\n", (i + 1), suspicious.get(i));
+                }
+                sendNotification(now, suspicious);
+            }
+        } catch (Exception e) {
+            logger.error("[LogMonitorTest] Unexpected error while scanning logs", e);
         }
     }
 
@@ -229,32 +255,7 @@ public class ExceptionMonitorService {
         return out;
     }
 
-    public void printNowForTesting() {
-        try {
-            List<String> lines = readAllLines(Paths.get(logFilePath));
-            if (lines.isEmpty()) {
-                logger.info("[LogMonitorTest] No lines in log file: {}", logFilePath);
-                return;
-            }
-            LocalDateTime now = LocalDateTime.now();
-            LocalDateTime from = now.minusHours(30);
-            List<String> window = filterByLastHour(lines, from, now);
-            List<String> blocks = findExceptionBlocks(window);
-            List<String> devOnly = filterDeveloperExceptions(blocks);
-            List<String> suspicious = dedupeBlocks(devOnly);
-            if (suspicious.isEmpty()) {
-                logger.info("[LogMonitorTest] No suspicious exceptions found.");
-            } else {
-                logger.info("[LogMonitorTest] Found {} unique suspicious exception block(s):", suspicious.size());
-                for (int i = 0; i < suspicious.size(); i++) {
-                    logger.info("===== Exception Block #{} =====\n{}\n", (i + 1), suspicious.get(i));
-                }
-                sendNotification(now, suspicious);
-            }
-        } catch (Exception e) {
-            logger.error("[LogMonitorTest] Unexpected error while scanning logs", e);
-        }
-    }
+
 
     // === PDF generator ===
     private byte[] generatePdf(String window, List<String> blocks) {
@@ -382,4 +383,5 @@ public class ExceptionMonitorService {
                 .filter(s -> !s.isBlank())
                 .toArray(String[]::new);
     }
+
 }

@@ -1,25 +1,17 @@
 package stream.api.adapter.log.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import stream.api.adapter.log.dao.entity.LogEntity;
 import stream.api.adapter.log.service.ExceptionMonitorService;
 import stream.api.adapter.log.model.response.LogResponse;
 import stream.api.adapter.log.service.LogReaderService;
-import stream.api.adapter.log.service.LogSaverService;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
-
-import static org.springframework.boot.logging.LoggingSystemProperty.LOG_PATH;
 
 @RestController
 @RequiredArgsConstructor
@@ -31,7 +23,7 @@ public class LogController {
 
     @GetMapping("/test/monitor")
     public String triggerMonitorOnce() {
-        exceptionMonitorService.printNowForTesting();
+        exceptionMonitorService.printTestLog();
         return "Triggered manual exception scan. Check application console logs.";
     }
 
