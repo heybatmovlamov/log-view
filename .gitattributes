@@ -1,3 +1,5 @@
 /gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+*.log -diff -merge -text
+src/main/resources/stream.log -diff -merge -text
