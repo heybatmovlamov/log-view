@@ -85,7 +85,7 @@ public class LogReaderService {
         String threadId = requests.get(0).getThreadId();
         String timestamp = requests.get(0).getTimestamp();
 
-        List<String> register = register(allLogs, threadId, timestamp);
+        List<String> register = register(allLogs, threadId, timestamp , serial);
         List<String> payment = pay(allLogs, paySerial);
 
         String detailList = register.stream().filter(line -> line.contains("id:")).toList().toString();
@@ -126,12 +126,12 @@ public class LogReaderService {
         return threadId;
     }
 
-    private List<String> register(List<String> logs, String threadId, String targetTimestamp) {
+    private List<String> register(List<String> logs, String threadId, String targetTimestamp , String serial) {
         int resIndex = -1;
 
         for (int i = 0; i < logs.size(); i++) {
             String line = logs.get(i);
-            if (line.contains("[" + threadId + "]") && line.contains("RES:") && line.contains(targetTimestamp)) {
+            if (line.contains("[" + threadId + "]") && line.contains("RES:") && line.contains(targetTimestamp) || line.contains("Result: "+serial)) {
                 resIndex = i;
                 break;
             }

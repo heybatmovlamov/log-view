@@ -114,7 +114,7 @@ public class ExceptionMonitorService {
     public void scanLastHourLogs() {
         if (!enabled) return;
         try {
-            List<String> lines = readAllLines(Paths.get(logFilePath));
+            List<String> lines = readAllLines(Paths.get(logFilePath+"stream.log"));
             if (lines.isEmpty()){
                 logger.warn("No log found");
                 return;
@@ -137,7 +137,7 @@ public class ExceptionMonitorService {
     }
     public void printTestLog() {
         try {
-            List<String> lines = readAllLines(Paths.get(logFilePath));
+            List<String> lines = readAllLines(Paths.get(logFilePath+"stream.log"));
             if (lines.isEmpty()) {
                 logger.info("[LogMonitorTest] No lines in log file: {}", logFilePath);
                 return;
