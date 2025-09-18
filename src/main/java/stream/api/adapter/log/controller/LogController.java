@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import stream.api.adapter.log.dao.entity.LogEntity;
 import stream.api.adapter.log.service.ExceptionMonitorService;
+import stream.api.adapter.log.model.response.LogResponse;
 import stream.api.adapter.log.service.LogReaderService;
 import stream.api.adapter.log.service.LogSaverService;
 
@@ -34,8 +35,24 @@ public class LogController {
         return "Triggered manual exception scan. Check application console logs.";
     }
 
-    @GetMapping("/{serial}")
-    public void getLogSaverService(@PathVariable String serial) {
-        service.findByOrdinatorOrReference("C:/Users/user/Desktop/stream.log",serial);
+    @GetMapping("/{file}/{serial}")
+    public ResponseEntity<LogResponse> getLogByFileAndSerial(@PathVariable String file,
+                                                             @PathVariable String serial) {
+        String path = "C:/Users/user/Desktop/stream/" + file;
+        return ResponseEntity.ok(service.findByOrdinatorOrReference(path, serial));
+    }
+
+    @GetMapping("/files")
+    public ResponseEntity<List<String>> getLogFiles() {
+        try {
+            Path logDir = Paths.get("C:/Users/user/Desktop/stream");
+            List<String> files = Files.list(logDir)
+                    .filter(p -> p.toString().endsWith(".log"))
+                    .map(p -> p.getFileName().toString())
+                    .toList();
+            return ResponseEntity.ok(files);
+        } catch (IOException e) {
+            return ResponseEntity.status(500).body(List.of());
+        }
     }
 }
