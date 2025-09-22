@@ -22,11 +22,11 @@ public class LogController {
     private final LogReaderService service;
     private final ExceptionMonitorService exceptionMonitorService;
 
-//    @GetMapping("/test/monitor")
-//    public String triggerMonitorOnce() {
-//        exceptionMonitorService.printTestLog();
-//        return "Triggered manual exception scan. Check application console logs.";
-//    }
+    @GetMapping("/test/monitor")
+    public String triggerMonitorOnce() {
+        exceptionMonitorService.scanLastHourCustomerLogs();
+        return "Triggered manual exception scan. Check application console logs.";
+    }
 
 //    @GetMapping("/{file}/{serial}")
 //    public ResponseEntity<LogResponse> getLogByFileAndSerial(@PathVariable String file,
