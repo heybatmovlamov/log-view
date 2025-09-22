@@ -12,7 +12,7 @@ public class OpenBrowserOnStartup implements CommandLineRunner {
     @Override
     public void run(String... args) throws Exception {
         if (Desktop.isDesktopSupported()) {
-            Desktop.getDesktop().browse(new URI("http://localhost:8080/index.html"));
+            Desktop.getDesktop().browse(new URI("http://localhost:8080/index2.html"));
         }
     }
 }
