@@ -2,16 +2,19 @@ package stream.api.adapter.log.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import stream.api.adapter.log.model.request.LogRequest;
 import stream.api.adapter.log.model.response.LogResponse;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -21,6 +24,11 @@ import java.util.stream.Stream;
 @Service
 @RequiredArgsConstructor
 public class LogReaderService {
+
+    private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+
+    @Value("${log.monitor.file}")
+    private String filePath;
 
     private final LogSaverService saverService;
 
@@ -76,16 +84,19 @@ public class LogReaderService {
     }
 
     public LogResponse findByOrdinatorOrReference(String filePath, String serial) {
+        //serial  - > thread
+        //
         List<String> allLogs = readAllLogs(filePath);
         List<String> serialLogs = readLogs(allLogs, serial);
 
         String paySerial = serialLogs.get(serialLogs.size() - 1);
+        serialLogs.forEach(System.out::println);
 
         List<LogRequest> requests = extractField(serialLogs);
         String threadId = requests.get(0).getThreadId();
         String timestamp = requests.get(0).getTimestamp();
 
-        List<String> register = register(allLogs, threadId, timestamp , serial);
+        List<String> register = register(allLogs, threadId, timestamp, serial);
         List<String> payment = pay(allLogs, paySerial);
 
         String detailList = register.stream().filter(line -> line.contains("id:")).toList().toString();
@@ -111,26 +122,12 @@ public class LogReaderService {
         }
     }
 
-    private String extractThread(String logLine) {
-        String threadPattern = "\\[T\\d+\\]";
-        String threadId = "";
-
-        Pattern threadPat = Pattern.compile(threadPattern);
-        Matcher threadMatcher = threadPat.matcher(logLine);
-
-        if (threadMatcher.find()) {
-            threadId = threadMatcher.group().replaceAll("[\\[\\]]", ""); // yalnız T00012345 hissəsi
-        }
-
-        return threadId;
-    }
-
-    private List<String> register(List<String> logs, String threadId, String targetTimestamp , String serial) {
+    private List<String> register(List<String> logs, String threadId, String targetTimestamp, String serial) {
         int resIndex = -1;
 
         for (int i = 0; i < logs.size(); i++) {
             String line = logs.get(i);
-            if (line.contains("[" + threadId + "]") && line.contains("RES:") && line.contains(targetTimestamp) || line.contains("Result: "+serial)) {
+            if (line.contains("[" + threadId + "]") && line.contains("RES:") && line.contains(targetTimestamp) || line.contains("Result: " + serial)) {
                 resIndex = i;
                 break;
             }
@@ -181,7 +178,7 @@ public class LogReaderService {
                 // Əvvəlcə geriyə bax
                 for (int j = i; j >= 0; j--) {
                     String previousLine = logs.get(j);
-                    if (previousLine.contains("REQ: Pay") || previousLine.contains("["+threadId+"]")) {
+                    if (previousLine.contains("REQ: Pay") || previousLine.contains("[" + threadId + "]")) {
                         int start = previousLine.indexOf('[');
                         int end = previousLine.indexOf(']', start);
                         if (start != -1 && end != -1) {
@@ -280,19 +277,19 @@ public class LogReaderService {
         return id;
     }
 
-    private  List<String> billList(List<String> logs, String id) {
+    private List<String> billList(List<String> logs, String id) {
         int idIndex = -1;
         String threadId = null;
 
         // 1. "id:" olan və GetBillList ilə bağlı olan threadId-ni tap
         for (int i = 0; i < logs.size(); i++) {
             String line = logs.get(i);
-            if (line.contains("Detail list: [id: "+id) || line.contains(id)) {
+            if (line.contains("Detail list: [id: " + id) || line.contains(id)) {
                 System.out.println(line);
                 // Geri gedərək REQ: GetBillList tap
                 for (int j = i; j >= 0; j--) {
                     String previousLine = logs.get(j);
-                    if (previousLine.contains("REQ: GetBillList") ) {
+                    if (previousLine.contains("REQ: GetBillList")) {
                         int start = previousLine.indexOf('[');
                         int end = previousLine.indexOf(']', start);
                         if (start != -1 && end != -1) {
@@ -327,7 +324,7 @@ public class LogReaderService {
                 if (started) {
                     result.add(line);
                     if (line.contains("RES: GetBillList")) {
-                        result.add(logs.get(i+1));
+                        result.add(logs.get(i + 1));
                         done = true;
                         break;
                     }
@@ -345,4 +342,109 @@ public class LogReaderService {
 
         return result;
     }
+
+
+    private List<String> readLogsUniqueData(List<String> allLogs, String code) {
+        return allLogs
+                .stream()
+                .filter(line -> line.contains( code ))
+                .collect(Collectors.toList());
+    }
+
+
+    public static List<String> extractAroundTimestamp(List<String> logs, String threadId, String targetTimestamp) {
+        LocalDateTime targetTime = LocalDateTime.parse(targetTimestamp, formatter);
+        List<String> result = new ArrayList<>();
+
+        for (String line : logs) {
+            // Hər sətirdə uyğun threadId varsa davam et
+            if (!line.contains("[" + threadId + "]")) continue;
+
+            // Sətirin timestamp-ini çıxar
+            String timeStr = line.substring(0, 23); // "2025-09-19 00:00:25.161"
+            LocalDateTime lineTime = LocalDateTime.parse(timeStr, formatter);
+
+            long secondsDiff = Duration.between(targetTime, lineTime).getSeconds();
+
+            // 1 dəqiqə əvvəl və 1 dəqiqə sonra olan sətirlər
+            if (secondsDiff >= -60 && secondsDiff <= 60) {
+                result.add(line);
+            }
+        }
+
+        return result;
+    }
+
+
+    public List<String> extractFindPaged(String file, String data, int page, int size) {
+        if (data.length() < 3) {
+            throw new RuntimeException("Axtardığınız datanın uzunluğu 4 simvoldan böyük olmalıdır");
+        }
+        String path = filePath+ "/" + file;
+        List<String> allLogs = readAllLogs(path);
+        List<String> filteredLogs = readLogsUniqueData(allLogs, data);
+
+        // Unikal log requestləri toplayırıq
+        List<LogRequest> uniqueThreadAndTimeStamp = filteredLogs.stream()
+                .map(this::extractField)
+                .distinct()
+                .collect(Collectors.toList());
+
+        // Pagination
+        int start = page * size;
+        int end = Math.min(start + size, uniqueThreadAndTimeStamp.size());
+        if (start >= uniqueThreadAndTimeStamp.size()) return Collections.emptyList();
+
+        // Result listini page-lə doldururuq
+        return uniqueThreadAndTimeStamp.subList(start, end).parallelStream()
+                .flatMap(logRequest -> extractAroundTimestamp(
+                        allLogs,
+                        logRequest.getThreadId(),
+                        logRequest.getTimestamp()
+                ).stream())
+                .collect(Collectors.toList());
+    }
+
+
+
+    private LogRequest extractField(String log) {
+        String timestampPattern = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}"; // Timestamp
+        String threadPattern = "\\[T\\d+\\]";
+
+        String timestamp = "";
+        String threadId = "";
+
+        Pattern timestampPat = Pattern.compile(timestampPattern);
+        Pattern threadPat = Pattern.compile(threadPattern);
+
+        Matcher timestampMatcher = timestampPat.matcher(log);
+        if (timestampMatcher.find()) {
+            timestamp = timestampMatcher.group();
+        }
+
+
+        Matcher threadMatcher = threadPat.matcher(log);
+        if (threadMatcher.find()) {
+            threadId = threadMatcher.group().replaceAll("[\\[\\]]", ""); // Sadece Thread ID
+        }
+
+        return LogRequest.builder()
+                .timestamp(timestamp)
+                .threadId(threadId)
+                .build();
+    }
+
+    public List<String> loadFiles() {
+        try {
+            Path logDir = Paths.get(filePath);
+            List<String> files = Files.list(logDir)
+                    .filter(p -> p.toString().endsWith(".log"))
+                    .map(p -> p.getFileName().toString())
+                    .toList();
+            return files;
+        }catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
 }
