@@ -86,7 +86,7 @@ public class LogReaderService {
     public LogResponse findByOrdinatorOrReference(String filePath, String serial) {
         //serial  - > thread
         //
-        List<String> allLogs = readAllLogs(filePath);
+        List<String> allLogs =  readAllLogs(filePath);
         List<String> serialLogs = readLogs(allLogs, serial);
 
         String paySerial = serialLogs.get(serialLogs.size() - 1);
@@ -390,6 +390,7 @@ public class LogReaderService {
                 .distinct()
                 .collect(Collectors.toList());
 
+        uniqueThreadAndTimeStamp.forEach(System.out::println);
         // Pagination
         int start = page * size;
         int end = Math.min(start + size, uniqueThreadAndTimeStamp.size());
@@ -409,7 +410,8 @@ public class LogReaderService {
 
     private LogRequest extractField(String log) {
         String timestampPattern = "^\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}\\.\\d{3}"; // Timestamp
-        String threadPattern = "\\[T\\d+\\]";
+        String threadPattern = "\\[T-[A-Za-z0-9]+\\]";
+
 
         String timestamp = "";
         String threadId = "";
