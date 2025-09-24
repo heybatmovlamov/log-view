@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import stream.api.adapter.log.service.ExceptionMonitorService;
 
 @SpringBootApplication
-@org.springframework.scheduling.annotation.EnableScheduling
+//@org.springframework.scheduling.annotation.EnableScheduling
 public class LogViewApplication {
 
 

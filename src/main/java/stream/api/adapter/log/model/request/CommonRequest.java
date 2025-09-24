@@ -1,7 +1,6 @@
 package stream.api.adapter.log.model.request;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
-import org.hibernate.annotations.CreationTimestamp;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
@@ -17,7 +16,7 @@ public class CommonRequest implements Serializable {
     private Boolean unicode;
     private Map<String, String> attachmentMap = new HashMap<>();
     private Integer module;
-    @CreationTimestamp
+//    @CreationTimestamp
     @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime scheduled;
 

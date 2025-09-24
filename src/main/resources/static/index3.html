@@ -70,7 +70,7 @@
         let result = [];
 
         logs.forEach(line => {
-            let match = line.match(/\[(T\d+)\]/);
+            let match = line.match(/\[(T\d+)]/);
             let currentThread = match ? match[1] : null;
 
             if (lastThread && currentThread && lastThread !== currentThread) {

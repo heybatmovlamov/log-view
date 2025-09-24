@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import stream.api.adapter.log.model.request.LogsRequest;
 import stream.api.adapter.log.service.ExceptionMonitorService;
 import stream.api.adapter.log.model.response.LogResponse;
 import stream.api.adapter.log.service.LogReaderService;
@@ -22,11 +23,11 @@ public class LogController {
     private final LogReaderService service;
     private final ExceptionMonitorService exceptionMonitorService;
 
-    @GetMapping("/test/monitor")
-    public String triggerMonitorOnce() {
-        exceptionMonitorService.scanLastHourCustomerLogs();
-        return "Triggered manual exception scan. Check application console logs.";
-    }
+//    @GetMapping("/test/monitor")
+//    public String triggerMonitorOnce() {
+//        exceptionMonitorService.scanLastHourCustomerLogs();
+//        return "Triggered manual exception scan. Check application console logs.";
+//    }
 
 //    @GetMapping("/{file}/{serial}")
 //    public ResponseEntity<LogResponse> getLogByFileAndSerial(@PathVariable String file,
@@ -35,15 +36,9 @@ public class LogController {
 //        return ResponseEntity.ok(service.findByOrdinatorOrReference(path, serial));
 //    }
 
-    @GetMapping("/{file}/{uniqueData}")
-    public ResponseEntity<List<String>> getByUniqueData(
-            @PathVariable String file,
-            @PathVariable String uniqueData,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
-
-
-        List<String> logs = service.extractFindPaged(file, uniqueData, page, size);
+    @PostMapping("/file")
+    public ResponseEntity<List<String>> getByUniqueData(@RequestBody LogsRequest req) {
+        List<String> logs = service.extractFindPaged(req.getFile(), req.getUniqueData(), req.getPage(), req.getSize());
         return ResponseEntity.ok(logs);
     }
 

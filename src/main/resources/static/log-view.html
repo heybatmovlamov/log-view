@@ -37,7 +37,6 @@
 </div>
 
 <script>
-    // Global dəyişənlər
     let page = 0;
     const size = 50;
     let loading = false;
@@ -46,15 +45,14 @@
     let currentUniqueData = '';
     const resultsDiv = document.getElementById("results");
 
-    // Faylları serverdən alıb select-ə doldur
+    // Faylları serverdən alıb select-ə doldur (GET qalır)
     async function loadFiles() {
         try {
-            let response = await fetch("http://localhost:8090/api/filter/files");
-            let files = await response.json();
-            let select = document.getElementById("logFiles");
-
+            const response = await fetch("http://localhost:8090/api/filter/files");
+            const files = await response.json();
+            const select = document.getElementById("logFiles");
             files.forEach(file => {
-                let option = document.createElement("option");
+                const option = document.createElement("option");
                 option.value = file;
                 option.textContent = file;
                 select.appendChild(option);
@@ -64,21 +62,20 @@
         }
     }
 
-    // Log sətirlərini rənglə və thread dəyişəndə separator qoy
     function highlightLogs(logs) {
         let lastThread = null;
-        let result = [];
+        const result = [];
 
         logs.forEach(line => {
-            let match = line.match(/\[(T\d+)\]/);
-            let currentThread = match ? match[1] : null;
+            const match = line.match(/\[(T\d+)\]/);
+            const currentThread = match ? match[1] : null;
 
             if (lastThread && currentThread && lastThread !== currentThread) {
                 result.push('<div class="thread-separator"></div>');
             }
             lastThread = currentThread;
 
-            let highlighted = line
+            const highlighted = line
                 .replace(/\[(T\d+)\]/g, '<span class="thread">[$1]</span>')
                 .replace(/REQ:/g, '<span class="req">REQ:</span>')
                 .replace(/RES:/g, '<span class="res">RES:</span>');
@@ -89,7 +86,6 @@
         return result.join("<br>");
     }
 
-    // Scroll event: aşağıya çatanda daha çox log yüklə
     resultsDiv.addEventListener('scroll', () => {
         if (loading || noMoreData) return;
         if (resultsDiv.scrollTop + resultsDiv.clientHeight >= resultsDiv.scrollHeight - 50) {
@@ -97,26 +93,41 @@
         }
     });
 
-    // Daha çox log yüklə
+    // ⬇️ BURADA DƏYİŞİKLİK: GET əvəzinə POST və URL-encode YOXDUR
     async function loadMoreLogs() {
         if (!currentFile || !currentUniqueData) return;
         loading = true;
 
-        let loadingDiv = document.createElement('div');
+        const loadingDiv = document.createElement('div');
         loadingDiv.id = 'loadingIndicator';
         loadingDiv.className = "text-center my-2 italic text-gray-500";
         loadingDiv.textContent = '⏳ Yüklənir...';
         resultsDiv.appendChild(loadingDiv);
 
         try {
-            let response = await fetch(`http://localhost:8090/api/filter/${currentFile}/${currentUniqueData}?page=${page}&size=${size}`);
-            if (!response.ok) throw new Error('Xəta baş verdi');
+            const response = await fetch("/api/filter/file", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                // hec bir url-encoding yoxdur; məlumatlar JSON body-də gedir
+                body: JSON.stringify({
+                    file: currentFile,
+                    uniqueData: currentUniqueData,
+                    page: page,
+                    size: size
+                })
+            });
 
-            let logs = await response.json();
-            if (logs.length === 0) {
+            if (!response.ok) throw new Error('Xəta baş verdi');
+            const logs = await response.json();
+
+            if (!Array.isArray(logs) || logs.length === 0) {
                 noMoreData = true;
             } else {
-                resultsDiv.innerHTML = resultsDiv.innerHTML.replace('⏳ Yüklənir...', '') + highlightLogs(logs);
+                // yüklənmə indikatorunu sil və nəticələri əlavə et
+                const indicator = document.getElementById('loadingIndicator');
+                if (indicator) indicator.remove();
+
+                resultsDiv.innerHTML += highlightLogs(logs);
                 page++;
             }
         } catch (err) {
@@ -124,12 +135,11 @@
             alert("Serverdən logları yükləmək mümkün olmadı!");
         } finally {
             loading = false;
-            let indicator = document.getElementById('loadingIndicator');
+            const indicator = document.getElementById('loadingIndicator');
             if (indicator) indicator.remove();
         }
     }
 
-    // Axtarış düyməsi ilə yeni logları yüklə
     async function fetchLog() {
         currentFile = document.getElementById("logFiles").value;
         currentUniqueData = document.getElementById("uniqueData").value.trim();
@@ -145,7 +155,6 @@
         await loadMoreLogs();
     }
 
-    // Səhifə açılanda faylları yüklə
     window.onload = loadFiles;
 </script>
 </body>
