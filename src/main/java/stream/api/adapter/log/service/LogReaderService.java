@@ -3,10 +3,14 @@ package stream.api.adapter.log.service;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 import stream.api.adapter.log.model.request.LogRequest;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -339,8 +343,7 @@ public class LogReaderService {
 //        return result;
 //    }
 
-
-    public List<String> extractFindPaged(String file, String data, int page, int size) {
+    public void streamLogs(String file, String data, int page, int size, ResponseBodyEmitter emitter) {
         if (data.length() < 3) {
             throw new RuntimeException("Axtardığınız datanın uzunluğu 4 simvoldan böyük olmalıdır");
         }
@@ -348,7 +351,6 @@ public class LogReaderService {
         String path = filePath + "/" + file;
 
         try (Stream<String> allLogs = Files.lines(Paths.get(path))) {
-
             List<LogRequest> filtered = allLogs
                     .filter(line -> line.contains(data))
                     .map(this::extractField)
@@ -356,14 +358,12 @@ public class LogReaderService {
 
             int start = page * size;
             int end = Math.min(start + size, filtered.size());
-            if (start >= filtered.size()) return Collections.emptyList();
+            if (start >= filtered.size()) return;
 
-            // yalnız lazım olan loglar
             List<LogRequest> pageLogs = filtered.subList(start, end);
 
-            // faylı ikinci dəfə oxumaq yerinə bütün faylı 1 dəfə oxu və uyğun gələnləri topla
             try (Stream<String> allLines = Files.lines(Paths.get(path))) {
-                return allLines.parallel()
+                allLines.parallel()
                         .filter(line -> pageLogs.stream().anyMatch(req -> {
                             if (!line.contains("[" + req.getThreadId() + "]")) return false;
                             String timeStr = line.substring(0, 23);
@@ -371,12 +371,60 @@ public class LogReaderService {
                             LocalDateTime target = LocalDateTime.parse(req.getTimestamp(), formatter);
                             long diff = Duration.between(target, lineTime).getSeconds();
                             return diff >= -60 && diff <= 60;
-                        })).toList();
+                        }))
+                        .forEach(line -> {
+                            try {
+                                emitter.send(line + "\n");
+                            } catch (IOException e) {
+                                throw new UncheckedIOException(e);
+                            }
+                        });
             }
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
     }
+
+    public void streamLiveLogs(String file, String uniqueData, ResponseBodyEmitter emitter) {
+        String path = filePath + "/" + file;
+
+        // İndi vaxtı qeyd edirik (bundan sonrakı loglar göstəriləcək)
+        LocalDateTime startTime = LocalDateTime.now();
+
+        new Thread(() -> {
+            try (BufferedReader reader = Files.newBufferedReader(Paths.get(path))) {
+                String line;
+                while (true) {
+                    line = reader.readLine();
+
+                    if (line == null) {
+                        // yeni xətt yoxdur, bir az gözləyirik
+                        Thread.sleep(100);
+                        continue;
+                    }
+
+                    try {
+                        // log timestamp-ı oxu (ilk 23 simvol məsələn: "2025-09-24 12:00:01.338")
+                        String timeStr = line.substring(0, 23);
+                        LocalDateTime lineTime = LocalDateTime.parse(timeStr, formatter);
+                        // yalnız startTime-dan sonra olan logları göstər
+                        if (lineTime.isAfter(startTime)) {
+                            if (uniqueData == null || uniqueData.isBlank() || line.contains(uniqueData)) {
+                                emitter.send(line + "\n", MediaType.TEXT_PLAIN);
+                            }
+                        }
+                    } catch (Exception parseEx) {
+                        // əgər format tutmadısa, atla
+                    }
+                }
+            } catch (Exception ex) {
+                try {
+                    emitter.completeWithError(ex);
+                } catch (Exception ignore) {}
+            }
+        }).start();
+    }
+
 
 
 

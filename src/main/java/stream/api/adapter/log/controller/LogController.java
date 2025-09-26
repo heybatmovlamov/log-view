@@ -1,18 +1,13 @@
 package stream.api.adapter.log.controller;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyEmitter;
 import stream.api.adapter.log.model.request.LogsRequest;
-import stream.api.adapter.log.service.ExceptionMonitorService;
-import stream.api.adapter.log.model.response.LogResponse;
 import stream.api.adapter.log.service.LogReaderService;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.util.List;
 
 @RestController
@@ -21,7 +16,6 @@ import java.util.List;
 public class LogController {
 
     private final LogReaderService service;
-    private final ExceptionMonitorService exceptionMonitorService;
 
 //    @GetMapping("/test/monitor")
 //    public String triggerMonitorOnce() {
@@ -36,10 +30,35 @@ public class LogController {
 //        return ResponseEntity.ok(service.findByOrdinatorOrReference(path, serial));
 //    }
 
-    @PostMapping("/file")
-    public ResponseEntity<List<String>> getByUniqueData(@RequestBody LogsRequest req) {
-        List<String> logs = service.extractFindPaged(req.getFile(), req.getUniqueData(), req.getPage(), req.getSize());
-        return ResponseEntity.ok(logs);
+    @PostMapping("/file-stream")
+    public ResponseEntity<ResponseBodyEmitter> streamLogs(@RequestBody LogsRequest req) {
+        ResponseBodyEmitter emitter =  new ResponseBodyEmitter();
+
+        new Thread(() -> {
+            try {
+                service.streamLogs(req.getFile(), req.getUniqueData(), req.getPage(), req.getSize(), emitter);
+                emitter.complete();
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+        }).start();
+        return ResponseEntity.ok(emitter);
+    }
+
+    @PostMapping("/file-live")
+    public ResponseEntity<ResponseBodyEmitter> streamLiveLogs(@RequestBody LogsRequest req) {
+        ResponseBodyEmitter emitter = new ResponseBodyEmitter(0L);
+        new Thread(() -> {
+            try {
+                service.streamLiveLogs(req.getFile(), req.getUniqueData(), emitter);
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+        }).start();
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_TYPE, "text/plain;charset=UTF-8") // 🔑 vacibdir
+                .body(emitter);
     }
 
     @GetMapping("/files")
